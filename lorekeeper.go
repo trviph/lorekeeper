@@ -108,6 +108,13 @@ func (k *Keeper) Write(msg []byte) (int, error) {
 	return n, nil
 }
 
+// Rotate to a new file immediately without waiting for the rotation conditions to be met.
+func (k *Keeper) Rotate() error {
+	k.fileMU.Lock()
+	defer k.fileMU.Unlock()
+	return k.rotate()
+}
+
 // Archive the current log file and create a new log file.
 func (k *Keeper) rotate() error {
 	// Close and rename the old file
