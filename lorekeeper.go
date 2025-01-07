@@ -149,5 +149,5 @@ func (k *Keeper) newArchiveName() (string, error) {
 }
 
 func (k *Keeper) shouldRotate(nextMsg []byte) bool {
-	return k.currentSize+len(nextMsg) > k.maxsize
+	return k.maxsize > 0 && k.currentSize+len(nextMsg) > k.maxsize
 }
