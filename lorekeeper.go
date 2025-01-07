@@ -1,11 +1,13 @@
 package lorekeeper
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
 	"path"
 	"sync"
+	"text/template"
 	"time"
 )
 
@@ -18,10 +20,12 @@ type Keeper struct {
 	name string
 	// See [WithExtension] for documentation.
 	extension string
-	// See [WithTimeFormat] for documentation
-	timeFormat string
+	// See [WithTimeLayout] for documentation
+	timeLayout string
 	// See [WithMaxsize] for documentation
 	maxsize int
+	// See [WithArchiveNameLayout] for documentation
+	archiveNameLayout *template.Template
 
 	fileMU      sync.Mutex
 	currentFile io.WriteCloser
@@ -52,8 +56,9 @@ func NewKeeper(opts ...Opt) (*Keeper, error) {
 		WithFolder(os.TempDir()),
 		WithName(defaultKeeperName()),
 		WithExtension(".log"),
-		WithTimeFormat("2006-01-02-15-04-05.000000000-0700"),
+		WithTimeLayout("2006-01-02-15-04-05.000000000-0700"),
 		WithMaxsize(MB),
+		WithArchiveNameLayout("{{ .time }}-{{ .name }}{{ .extension }}"),
 	}
 
 	var err error
@@ -109,7 +114,11 @@ func (k *Keeper) rotate() error {
 	if err := k.currentFile.Close(); err != nil {
 		return fmt.Errorf("failed to rotate log file, caused by %w", err)
 	}
-	if err := os.Rename(k.getCurrentFilePath(), k.newArchiveName()); err != nil {
+	archiveName, err := k.newArchiveName()
+	if err != nil {
+		return fmt.Errorf("failed to get new archive name, caused by %w", err)
+	}
+	if err := os.Rename(k.getCurrentFilePath(), archiveName); err != nil {
 		return fmt.Errorf("failed to rotate log file, caused by %w", err)
 	}
 
@@ -123,8 +132,20 @@ func (k *Keeper) rotate() error {
 	return nil
 }
 
-func (k *Keeper) newArchiveName() string {
-	return path.Join(k.folder, fmt.Sprintf("%s-%s%s", time.Now().Format(k.timeFormat), k.name, k.extension))
+func (k *Keeper) newArchiveName() (string, error) {
+	var buff bytes.Buffer
+	err := k.archiveNameLayout.Execute(
+		&buff,
+		map[string]any{
+			"time":      time.Now().Format(k.timeLayout),
+			"name":      k.name,
+			"extension": k.extension,
+		},
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to execute template, caused by %w", err)
+	}
+	return path.Join(k.folder, buff.String()), nil
 }
 
 func (k *Keeper) shouldRotate(nextMsg []byte) bool {

@@ -16,8 +16,10 @@ func TestLog(t *testing.T) {
 		lorekeeper.WithName("Lorekeeper Test Log"),
 		// Folder where the log files is stored
 		lorekeeper.WithFolder("."),
-		// Each log file hold a maximum of 2 Kibibyte
+		// Each log file hold a maximum of 50 Kibibyte
 		lorekeeper.WithMaxsize(50*lorekeeper.Kb),
+		// Change the name layout of archived logs
+		lorekeeper.WithArchiveNameLayout("{{ .name }}_{{ .time }}"),
 	)
 	if err != nil {
 		t.Errorf("failed to create a new keeper, caused by %s", err)

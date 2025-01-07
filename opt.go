@@ -1,6 +1,10 @@
 package lorekeeper
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+	"text/template"
+)
 
 // An Opt is a function that mutates a [Keeper]'s attributes.
 // An Opt should return a mutated Keeper or return an error if it fails to mutate the Keeper.
@@ -40,7 +44,7 @@ func WithExtension(extension string) Opt {
 	}
 }
 
-// Set the timestamp format for the backup log filename.
+// Set the timestamp layout for the backup log filename.
 // The default value is "2006-01-02-15-04-05.000000000-0700".
 //
 // The layout must be of a valid Go time layout, since this package use [time.Time.Format]
@@ -52,9 +56,9 @@ func WithExtension(extension string) Opt {
 // See more about Go time layout at [time package constants].
 //
 // [time package constants]: https://pkg.go.dev/time#pkg-constants
-func WithTimeFormat(layout string) Opt {
+func WithTimeLayout(layout string) Opt {
 	return func(k *Keeper) (*Keeper, error) {
-		k.timeFormat = layout
+		k.timeLayout = layout
 		return k, nil
 	}
 }
@@ -66,6 +70,28 @@ func WithTimeFormat(layout string) Opt {
 func WithMaxsize(size int) Opt {
 	return func(k *Keeper) (*Keeper, error) {
 		k.maxsize = size
+		return k, nil
+	}
+}
+
+// Set the filename layout for the archived log file.
+// If the layout is empty will use the default value.
+// The default value is "{{ .time }}-{{ .name }}{{ .extension }}".
+// The layout is parsed using the [text/template] package.
+// The supported arguments are:
+//   - {{ .time }} the time when the rotation happened.
+//   - {{ .name }} the name of the Keeper.
+//   - {{ .extension }} the extension of the file.
+func WithArchiveNameLayout(layout string) Opt {
+	return func(k *Keeper) (*Keeper, error) {
+		if len(layout) == 0 {
+			return k, nil
+		}
+		templ, err := template.New("lorekeeper-archive-template").Parse(layout)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set archive name layout, caused by %w", err)
+		}
+		k.archiveNameLayout = templ
 		return k, nil
 	}
 }
