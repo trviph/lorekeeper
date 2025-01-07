@@ -36,7 +36,7 @@ func DefaultKeeper() *Keeper {
 //
 // Example usage:
 //
-//		import "github.com/trviph/loremaster"
+//		import "github.com/trviph/lorekeeper"
 //
 //		func main() {
 //			keeper, err := lorekeeper.NewKeeper(
