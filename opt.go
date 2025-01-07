@@ -51,7 +51,7 @@ func WithExtension(extension string) Opt {
 // it will not return an error if the layout is invalid,
 // instead it will use whatever default layout that method is using.
 //
-// It should include nanosecond in order to avoid name conflict. Upon name conflict, the new log file will replace the old log.
+// The layout should include nanosecond in order to avoid name conflict. Upon name conflict, the new log file will replace the old log.
 //
 // See more about Go time layout at [time package constants].
 //

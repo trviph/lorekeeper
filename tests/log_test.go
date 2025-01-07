@@ -12,13 +12,17 @@ import (
 func TestLog(t *testing.T) {
 	// Create a Keeper
 	keeper, err := lorekeeper.NewKeeper(
-		// Logger name
+		// Set the Keeper name, this will be used when generate log files.
 		lorekeeper.WithName("Lorekeeper Test Log"),
-		// Folder where the log files is stored
+		// Set the extension of archived logs.
+		lorekeeper.WithExtension(".old"),
+		// Set the time layout of archived logs.
+		lorekeeper.WithTimeLayout("20060102150405.000"),
+		// Specify the folder where the log files will be stored.
 		lorekeeper.WithFolder("."),
-		// Each log file hold a maximum of 50 Kibibyte
+		// Each log file hold a maximum of 50 Kibibyte before being rotated.
 		lorekeeper.WithMaxsize(50*lorekeeper.Kb),
-		// Change the name layout of archived logs
+		// Set the name layout of archived logs.
 		lorekeeper.WithArchiveNameLayout("{{ .name }}_{{ .time }}"),
 	)
 	if err != nil {
