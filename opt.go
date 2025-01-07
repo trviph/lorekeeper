@@ -1,5 +1,7 @@
 package lorekeeper
 
+import "strings"
+
 // An Opt is a function that mutates a [Keeper]'s attributes.
 // An Opt should return a mutated Keeper or return an error if it fails to mutate the Keeper.
 // An Opt should be used together with [NewKeeper].
@@ -7,10 +9,10 @@ type Opt func(*Keeper) (*Keeper, error)
 
 // The folder where the log files are stored.
 // The default value is [os.TempDir].
-func WithFolder(name string) Opt {
+func WithFolder(path string) Opt {
 	return func(k *Keeper) (*Keeper, error) {
-		if len(name) > 0 {
-			k.name = name
+		if len(path) > 0 {
+			k.folder = path
 		}
 		return k, nil
 	}
@@ -22,7 +24,7 @@ func WithFolder(name string) Opt {
 func WithName(name string) Opt {
 	return func(k *Keeper) (*Keeper, error) {
 		if len(name) > 0 {
-			k.name = name
+			k.name = strings.ReplaceAll(strings.ToLower(name), " ", "-")
 		}
 		return k, nil
 	}
@@ -39,12 +41,14 @@ func WithExtension(extension string) Opt {
 }
 
 // Set the timestamp format for the backup log filename.
-// The default value is "20060102T150405.999999999MST" derived from [time.RFC3339Nano].
+// The default value is "2006-01-02-15-04-05.000000000-0700".
 //
 // The layout must be of a valid Go time layout, since this package use [time.Time.Format]
 // it will not return an error if the layout is invalid,
 // instead it will use whatever default layout that method is using.
-// It should include nanosecond in order to avoid name conflict.
+//
+// It should include nanosecond in order to avoid name conflict. Upon name conflict, the new log file will replace the old log.
+//
 // See more about Go time layout at [time package constants].
 //
 // [time package constants]: https://pkg.go.dev/time#pkg-constants
