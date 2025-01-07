@@ -1,9 +1,16 @@
 package lorekeeper
 
-import "os"
+import (
+	"fmt"
+	"io"
+	"os"
+	"path"
+	"sync"
+	"time"
+)
 
 // A [Keeper] is a log file manager that handles writing to log files and rotates them.
-// Use [DefaultKeeper] or [NewKeeper] to create a new Keeper.
+// Use [NewKeeper] to create a new Keeper.
 type Keeper struct {
 	// See [WithFolder] for documentation.
 	folder string
@@ -15,19 +22,15 @@ type Keeper struct {
 	timeFormat string
 	// See [WithMaxsize] for documentation
 	maxsize int
+
+	fileMU      sync.Mutex
+	currentFile io.WriteCloser
+	currentSize int
 }
 
-// Create a new [Keeper] with the default configurations.
-// See [NewKeeper] if you want to configure the Keeper yourself.
-func DefaultKeeper() *Keeper {
-	return &Keeper{
-		folder:     os.TempDir(),
-		name:       defaultKeeperName(),
-		extension:  ".log",
-		timeFormat: "20060102T150405.999999999MST",
-		maxsize:    MB,
-	}
-}
+// Make sure that keeper implements the [io.Writer] interface,
+// so that it can be use with the [log] package.
+var _ io.Writer = (*Keeper)(nil)
 
 // Create a new [Keeper] with the provided options.
 // This will create a [DefaultKeeper] if no option is provided.
@@ -45,13 +48,85 @@ func DefaultKeeper() *Keeper {
 //	 	)
 //		}
 func NewKeeper(opts ...Opt) (*Keeper, error) {
-	keeper := DefaultKeeper()
+	defaultOpts := []Opt{
+		WithFolder(os.TempDir()),
+		WithName(defaultKeeperName()),
+		WithExtension(".log"),
+		WithTimeFormat("2006-01-02-15-04-05.000000000-0700"),
+		WithMaxsize(MB),
+	}
+
 	var err error
-	for _, opt := range opts {
+	keeper := new(Keeper)
+	for _, opt := range append(defaultOpts, opts...) {
 		keeper, err = opt(keeper)
 		if err != nil {
-			break
+			return nil, err
 		}
 	}
+
+	file, err := keeper.getCurrentFile()
+	if err != nil {
+		return nil, err
+	}
+	keeper.currentFile = file
+
 	return keeper, err
+}
+
+// Get the current log file descriptor.
+func (k *Keeper) getCurrentFile() (*os.File, error) {
+	return os.OpenFile(k.getCurrentFilePath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+}
+
+// Get the path to the current log file.
+func (k *Keeper) getCurrentFilePath() string {
+	return path.Join(k.folder, fmt.Sprintf("%s%s", k.name, k.extension))
+}
+
+// Write the msg to the current log file.
+func (k *Keeper) Write(msg []byte) (int, error) {
+	k.fileMU.Lock()
+	defer k.fileMU.Unlock()
+
+	if k.shouldRotate(msg) {
+		if err := k.rotate(); err != nil {
+			return 0, err
+		}
+	}
+
+	n, err := k.currentFile.Write(msg)
+	if err != nil {
+		return 0, err
+	}
+	k.currentSize += n
+	return n, nil
+}
+
+// Archive the current log file and create a new log file.
+func (k *Keeper) rotate() error {
+	// Close and rename the old file
+	if err := k.currentFile.Close(); err != nil {
+		return fmt.Errorf("failed to rotate log file, caused by %w", err)
+	}
+	if err := os.Rename(k.getCurrentFilePath(), k.newArchiveName()); err != nil {
+		return fmt.Errorf("failed to rotate log file, caused by %w", err)
+	}
+
+	// Create a new file
+	file, err := k.getCurrentFile()
+	if err != nil {
+		return err
+	}
+	k.currentFile = file
+	k.currentSize = 0
+	return nil
+}
+
+func (k *Keeper) newArchiveName() string {
+	return path.Join(k.folder, fmt.Sprintf("%s-%s%s", time.Now().Format(k.timeFormat), k.name, k.extension))
+}
+
+func (k *Keeper) shouldRotate(nextMsg []byte) bool {
+	return k.currentSize+len(nextMsg) > k.maxsize
 }
