@@ -21,7 +21,7 @@ func TestLog(t *testing.T) {
 		// Specify the folder where the log files will be stored.
 		lorekeeper.WithFolder("."),
 		// Each log file hold a maximum of 50 Kibibyte before being rotated.
-		lorekeeper.WithMaxsize(50*lorekeeper.Kb),
+		lorekeeper.WithMaxSize(50*lorekeeper.Kb),
 		// Set the name layout of archived logs.
 		lorekeeper.WithArchiveNameLayout("{{ .name }}_{{ .time }}"),
 	)

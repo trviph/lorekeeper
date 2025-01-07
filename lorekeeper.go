@@ -22,8 +22,8 @@ type Keeper struct {
 	extension string
 	// See [WithTimeLayout] for documentation
 	timeLayout string
-	// See [WithMaxsize] for documentation
-	maxsize int
+	// See [WithMaxSize] for documentation
+	maxSize int
 	// See [WithArchiveNameLayout] for documentation
 	archiveNameLayout *template.Template
 
@@ -57,7 +57,7 @@ func NewKeeper(opts ...Opt) (*Keeper, error) {
 		WithName(defaultKeeperName()),
 		WithExtension(".log"),
 		WithTimeLayout("2006-01-02-15-04-05.000000000-0700"),
-		WithMaxsize(15 * Mb),
+		WithMaxSize(15 * Mb),
 		WithArchiveNameLayout("{{ .time }}-{{ .name }}{{ .extension }}"),
 	}
 
@@ -156,5 +156,5 @@ func (k *Keeper) newArchiveName() (string, error) {
 }
 
 func (k *Keeper) shouldRotate(nextMsg []byte) bool {
-	return k.maxsize > 0 && k.currentSize+len(nextMsg) > k.maxsize
+	return k.maxSize > 0 && k.currentSize+len(nextMsg) > k.maxSize
 }
