@@ -120,6 +120,27 @@ func (k *Keeper) applyOpts(opts ...Opt) error {
 		}
 		k.archives = archived
 	}
+
+	if err := k.setupCron(); err != nil {
+		return fmt.Errorf("failed to apply option, caused by %w", err)
+	}
+	return nil
+}
+
+func (k *Keeper) setupCron() error {
+	if k.c == nil {
+		k.c = cron.New()
+	} else {
+		k.c.Remove(k.cEntryID)
+		k.c.Stop()
+	}
+	if len(k.cronFormat) > 0 {
+		var err error
+		if k.cEntryID, err = k.c.AddFunc(k.cronFormat, func() { _ = k.Rotate() }); err != nil {
+			return fmt.Errorf("failed to setup cron, caused by %w", err)
+		}
+	}
+	go k.c.Run()
 	return nil
 }
 

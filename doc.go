@@ -79,5 +79,7 @@
 // You can also rotate the current log manually by using [Keeper.Rotate] or [Keeper.Close], the difference between these two functions is that after [Keeper.Rotate], you can continue to use the Keeper as it rotates the current log but keeps it open for further writing.
 // [Keeper.Close] will rotate and close the current log preventing any subsequent call from writing more messages into it.
 //
+// The Keeper can rotate log based on cron schedule, see [WithCron] option for more info.
+//
 // [Logrus]: https://github.com/sirupsen/logrus
 package lorekeeper

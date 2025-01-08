@@ -129,6 +129,13 @@ func WithMaxFiles(size int) Opt {
 	}
 }
 
+// Setting for cron rotation, this package uses [cron] to handle creating and runnnig cron jobs.
+// See [CRON Expression Format] and [Predefined schedules] for more info on the cron format.
+// This feature is disabled by default.
+//
+// [cron]: https://pkg.go.dev/github.com/robfig/cron/v3
+// [CRON Expression Format]: https://pkg.go.dev/github.com/robfig/cron/v3#hdr-CRON_Expression_Format
+// [Predefined schedules]: https://pkg.go.dev/github.com/robfig/cron/v3#hdr-Predefined_schedules
 func WithCron(cronFormat string) Opt {
 	return func(k *Keeper) (*Keeper, error) {
 		if len(cronFormat) > 0 {
