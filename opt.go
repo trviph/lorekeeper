@@ -95,3 +95,15 @@ func WithArchiveNameLayout(layout string) Opt {
 		return k, nil
 	}
 }
+
+// Maximum number of files to keep.
+// Keeper will remove oldest file based on modification time,
+// if the number of archived files is greater than the specified argument.
+// This feature is disabled by default.
+// Set this value > zero to enable this feature.
+func WithMaxFiles(size int) Opt {
+	return func(k *Keeper) (*Keeper, error) {
+		k.maxFiles = size
+		return k, nil
+	}
+}
