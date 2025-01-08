@@ -9,6 +9,8 @@ import (
 	"sync"
 	"text/template"
 	"time"
+
+	"github.com/trviph/collection"
 )
 
 // A [Keeper] is a log file manager that handles writing to log files and rotates them.
@@ -22,14 +24,18 @@ type Keeper struct {
 	extension string
 	// See [WithTimeLayout] for documentation
 	timeLayout string
-	// See [WithMaxsize] for documentation
-	maxsize int
+	// See [WithMaxSize] for documentation
+	maxSize int
 	// See [WithArchiveNameLayout] for documentation
 	archiveNameLayout *template.Template
+	// Set [WithMaxFiles] for documentation
+	maxFiles int
 
 	fileMU      sync.Mutex
 	currentFile io.WriteCloser
 	currentSize int
+
+	archives *collection.List[string]
 }
 
 // Make sure that keeper implements the [io.Writer] interface,
@@ -57,8 +63,9 @@ func NewKeeper(opts ...Opt) (*Keeper, error) {
 		WithName(defaultKeeperName()),
 		WithExtension(".log"),
 		WithTimeLayout("2006-01-02-15-04-05.000000000-0700"),
-		WithMaxsize(15 * Mb),
+		WithMaxSize(15 * Mb),
 		WithArchiveNameLayout("{{ .time }}-{{ .name }}{{ .extension }}"),
+		WithMaxFiles(0),
 	}
 
 	var err error
@@ -76,7 +83,23 @@ func NewKeeper(opts ...Opt) (*Keeper, error) {
 	}
 	keeper.currentFile = file
 
+	if keeper.maxFiles > 0 {
+		archived, err := keeper.getArchives()
+		if err != nil {
+			return nil, err
+		}
+		keeper.archives = archived
+	}
+
 	return keeper, err
+}
+
+func (k *Keeper) getArchives() (*collection.List[string], error) {
+	pattern, err := k.getArchiveGlobPattern()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get archive pattern, caused by %w", err)
+	}
+	return getArchives(pattern)
 }
 
 // Get the current log file descriptor.
@@ -108,6 +131,13 @@ func (k *Keeper) Write(msg []byte) (int, error) {
 	return n, nil
 }
 
+// Rotate to a new file immediately without waiting for the rotation conditions to be met.
+func (k *Keeper) Rotate() error {
+	k.fileMU.Lock()
+	defer k.fileMU.Unlock()
+	return k.rotate()
+}
+
 // Archive the current log file and create a new log file.
 func (k *Keeper) rotate() error {
 	// Close and rename the old file
@@ -129,6 +159,21 @@ func (k *Keeper) rotate() error {
 	}
 	k.currentFile = file
 	k.currentSize = 0
+
+	// Remove oldest archive
+	if k.maxFiles > 0 {
+		k.archives.Append(archiveName)
+		for k.archives.Length() > k.maxFiles {
+			oldest, err := k.archives.Dequeue()
+			if err != nil {
+				return fmt.Errorf("failed to get oldest archive name, caused by %w", err)
+			}
+			if err := os.Remove(oldest); err != nil {
+				return fmt.Errorf("failed to remove oldest archive name, caused by %w", err)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -148,6 +193,22 @@ func (k *Keeper) newArchiveName() (string, error) {
 	return path.Join(k.folder, buff.String()), nil
 }
 
+func (k *Keeper) getArchiveGlobPattern() (string, error) {
+	var buff bytes.Buffer
+	err := k.archiveNameLayout.Execute(
+		&buff,
+		map[string]any{
+			"time":      "*",
+			"name":      k.name,
+			"extension": k.extension,
+		},
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to execute template, caused by %w", err)
+	}
+	return path.Join(k.folder, buff.String()), nil
+}
+
 func (k *Keeper) shouldRotate(nextMsg []byte) bool {
-	return k.maxsize > 0 && k.currentSize+len(nextMsg) > k.maxsize
+	return k.maxSize > 0 && k.currentSize+len(nextMsg) > k.maxSize
 }

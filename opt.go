@@ -67,9 +67,9 @@ func WithTimeLayout(layout string) Opt {
 // Keeper will rotate the log file if its size exceeds this value.
 // Set this value to zero or negative will disable this feature.
 // The default value is 15[Mb].
-func WithMaxsize(size int) Opt {
+func WithMaxSize(size int) Opt {
 	return func(k *Keeper) (*Keeper, error) {
-		k.maxsize = size
+		k.maxSize = size
 		return k, nil
 	}
 }
@@ -92,6 +92,18 @@ func WithArchiveNameLayout(layout string) Opt {
 			return nil, fmt.Errorf("failed to set archive name layout, caused by %w", err)
 		}
 		k.archiveNameLayout = templ
+		return k, nil
+	}
+}
+
+// Maximum number of files to keep.
+// Keeper will remove oldest file based on modification time,
+// if the number of archived files is greater than the specified argument.
+// This feature is disabled by default.
+// Set this value > zero to enable this feature.
+func WithMaxFiles(size int) Opt {
+	return func(k *Keeper) (*Keeper, error) {
+		k.maxFiles = size
 		return k, nil
 	}
 }

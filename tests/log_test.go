@@ -13,17 +13,19 @@ func TestLog(t *testing.T) {
 	// Create a Keeper
 	keeper, err := lorekeeper.NewKeeper(
 		// Set the Keeper name, this will be used when generate log files.
-		lorekeeper.WithName("Lorekeeper Test Log"),
+		lorekeeper.WithName("Lorekeeper Test"),
 		// Set the extension of archived logs.
-		lorekeeper.WithExtension(".old"),
+		lorekeeper.WithExtension(".log"),
 		// Set the time layout of archived logs.
 		lorekeeper.WithTimeLayout("20060102150405.000"),
 		// Specify the folder where the log files will be stored.
 		lorekeeper.WithFolder("."),
 		// Each log file hold a maximum of 50 Kibibyte before being rotated.
-		lorekeeper.WithMaxsize(50*lorekeeper.Kb),
+		lorekeeper.WithMaxSize(50*lorekeeper.Kb),
 		// Set the name layout of archived logs.
-		lorekeeper.WithArchiveNameLayout("{{ .name }}_{{ .time }}"),
+		lorekeeper.WithArchiveNameLayout("{{ .name }}-{{ .time }}"),
+		// Set the maximum number of archives to keep.
+		lorekeeper.WithMaxFiles(3),
 	)
 	if err != nil {
 		t.Errorf("failed to create a new keeper, caused by %s", err)
