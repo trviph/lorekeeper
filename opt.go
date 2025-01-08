@@ -128,3 +128,12 @@ func WithMaxFiles(size int) Opt {
 		return k, nil
 	}
 }
+
+func WithCron(cronFormat string) Opt {
+	return func(k *Keeper) (*Keeper, error) {
+		if len(cronFormat) > 0 {
+			k.cronFormat = cronFormat
+		}
+		return k, nil
+	}
+}
