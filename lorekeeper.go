@@ -40,7 +40,7 @@ type Keeper struct {
 
 // Make sure that keeper implements the [io.Writer] interface,
 // so that it can be use with the [log] package.
-var _ io.Writer = (*Keeper)(nil)
+var _ io.WriteCloser = (*Keeper)(nil)
 
 // Create a new [Keeper] with the provided options.
 // This will create a [DefaultKeeper] if no option is provided.
@@ -129,6 +129,17 @@ func (k *Keeper) Write(msg []byte) (int, error) {
 	}
 	k.currentSize += n
 	return n, nil
+}
+
+// Rotate the current log file and close the Keeper.
+// Any subsequence writes after this may cause error.
+func (k *Keeper) Close() error {
+	k.fileMU.Lock()
+	defer k.fileMU.Unlock()
+	if err := k.rotate(); err != nil {
+		return fmt.Errorf("failed to rotate file, cause by %w", err)
+	}
+	return k.currentFile.Close()
 }
 
 // Rotate to a new file immediately without waiting for the rotation conditions to be met.

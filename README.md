@@ -1,10 +1,10 @@
 # Lorekeeper
 
-[![CI](https://github.com/trviph/lorekeeper/actions/workflows/ci.yaml/badge.svg)](https://github.com/trviph/lorekeeper/actions/workflows/ci.yaml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/trviph/lorekeeper.svg)](https://pkg.go.dev/github.com/trviph/lorekeeper) [![CI](https://github.com/trviph/lorekeeper/actions/workflows/ci.yaml/badge.svg)](https://github.com/trviph/lorekeeper/actions/workflows/ci.yaml) [![codecov](https://codecov.io/gh/trviph/lorekeeper/graph/badge.svg?token=7DDZ8QNJHW)](https://codecov.io/gh/trviph/lorekeeper)
 
-Lorekeeper is a Go package that handles log files rotation. Lorekeeper should work well with the standard log library.
+Lorekeeper is a Go package that manages log rotation. It should work nicely with the Go standard log package.
 
-**Note:** Lorekeeper is not a logging package, it only manages the log files.
+**Note:** Lorekeeper is not a logging package, it only manages the log files, and should be use with other logging packages such as the standard [log](#with-standard-log-package), [slog](#with-standard-slog-package), or [logrus](#with-logrus).
 
 ## Quick Guide
 
