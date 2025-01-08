@@ -1,2 +1,4 @@
+github.com/robfig/cron/v3 v3.0.1 h1:WdRxkvbJztn8LMz/QEvLN5sBU+xKpSqwwUO1Pjr4qDs=
+github.com/robfig/cron/v3 v3.0.1/go.mod h1:eQICP3HwyT7UooqI/z+Ov+PtYAWygg1TEWWzGIFLtro=
 github.com/trviph/collection v0.5.1 h1:NS48UecAbBg0gFtB17dtrjSLkFOIXQ6m+sDoNgBcDm0=
 github.com/trviph/collection v0.5.1/go.mod h1:gYfVUlEZlkQn7Dim8gfGm2u05RsHrISp9rM/a/KqXL8=

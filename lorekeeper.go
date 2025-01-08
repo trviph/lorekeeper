@@ -9,6 +9,7 @@ import (
 	"sync"
 	"text/template"
 
+	"github.com/robfig/cron/v3"
 	"github.com/trviph/collection"
 )
 
@@ -27,8 +28,13 @@ type Keeper struct {
 	maxSize int
 	// See [WithArchiveNameLayout] for documentation
 	archiveNameLayout *template.Template
-	// Set [WithMaxFiles] for documentation
+	// See [WithMaxFiles] for documentation
 	maxFiles int
+	// See [WithCron] for documentation
+	cronspec string
+
+	c        *cron.Cron
+	cEntryID cron.EntryID
 
 	mu          sync.Mutex
 	currentFile io.WriteCloser
@@ -65,11 +71,12 @@ func NewKeeper(opts ...Opt) (*Keeper, error) {
 		WithMaxSize(15 * Mb),
 		WithArchiveNameLayout("{{ .time }}-{{ .name }}{{ .extension }}"),
 		WithMaxFiles(0),
+		WithCron(""),
 	}
 	finalOpts := append(defaultOpts, opts...)
 
-	keeper, err := applyOpts(new(Keeper), finalOpts...)
-	if err != nil {
+	keeper := new(Keeper)
+	if err := keeper.applyOpts(finalOpts...); err != nil {
 		return nil, fmt.Errorf("failed to create new keeper, caused by %w", err)
 	}
 
@@ -78,43 +85,62 @@ func NewKeeper(opts ...Opt) (*Keeper, error) {
 	if !new {
 		keeper.mu.Lock()
 		defer keeper.mu.Unlock()
-		keeper, err = applyOpts(keeper, opts...)
-		if err != nil {
+		if err := keeper.applyOpts(opts...); err != nil {
 			return nil, fmt.Errorf("failed to create new keeper, caused by %w", err)
 		}
 	}
 
-	return keeper, err
+	return keeper, nil
 }
 
-func applyOpts(keeper *Keeper, opts ...Opt) (*Keeper, error) {
+func (k *Keeper) applyOpts(opts ...Opt) error {
 	var err error
 	for _, opt := range opts {
-		keeper, err = opt(keeper)
+		k, err = opt(k)
 		if err != nil {
-			return nil, fmt.Errorf("failed to apply option, caused by %w", err)
+			return fmt.Errorf("failed to apply option, caused by %w", err)
 		}
 	}
 
-	file, err := keeper.getCurrentFile()
+	file, err := k.getCurrentFile()
 	if err != nil {
-		return nil, fmt.Errorf("failed to apply option, caused by %w", err)
+		return fmt.Errorf("failed to apply option, caused by %w", err)
 	}
-	keeper.currentFile = file
+	k.currentFile = file
 	stat, err := file.Stat()
 	if err != nil {
-		return nil, fmt.Errorf("failed to apply option, caused by %w", err)
+		return fmt.Errorf("failed to apply option, caused by %w", err)
 	}
-	keeper.currentSize = int(stat.Size())
+	k.currentSize = int(stat.Size())
 
-	if keeper.maxFiles > 0 {
-		archived, err := keeper.getArchives()
+	if k.maxFiles > 0 {
+		archived, err := k.getArchives()
 		if err != nil {
-			return nil, fmt.Errorf("failed to apply option, caused by %w", err)
+			return fmt.Errorf("failed to apply option, caused by %w", err)
 		}
-		keeper.archives = archived
+		k.archives = archived
 	}
-	return keeper, nil
+
+	if err := k.setupCron(); err != nil {
+		return fmt.Errorf("failed to apply option, caused by %w", err)
+	}
+	return nil
+}
+
+func (k *Keeper) setupCron() error {
+	if k.c == nil {
+		k.c = cron.New()
+		go k.c.Run()
+	} else {
+		k.c.Remove(k.cEntryID)
+	}
+	if len(k.cronspec) > 0 {
+		var err error
+		if k.cEntryID, err = k.c.AddFunc(k.cronspec, func() { _ = k.Rotate() }); err != nil {
+			return fmt.Errorf("failed to setup cron, caused by %w", err)
+		}
+	}
+	return nil
 }
 
 func (k *Keeper) getArchives() (*collection.List[string], error) {

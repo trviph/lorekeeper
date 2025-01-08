@@ -87,7 +87,7 @@ func WithTimeLayout(layout string) Opt {
 // Maximum size in bytes per log file.
 // Keeper will rotate the log file if its size exceeds this value.
 // Set this value to zero or negative will disable this feature.
-// The default value is 15[Mb].
+// The default value is 15 [Mb].
 func WithMaxSize(size int) Opt {
 	return func(k *Keeper) (*Keeper, error) {
 		k.maxSize = size
@@ -125,6 +125,22 @@ func WithArchiveNameLayout(layout string) Opt {
 func WithMaxFiles(size int) Opt {
 	return func(k *Keeper) (*Keeper, error) {
 		k.maxFiles = size
+		return k, nil
+	}
+}
+
+// Setting for cron rotation, this package uses [cron] to handle creating and runnnig cron jobs.
+// See [CRON Expression Format] and [Predefined schedules] for more info on the cron format.
+// This feature is disabled by default.
+//
+// [cron]: https://pkg.go.dev/github.com/robfig/cron/v3
+// [CRON Expression Format]: https://pkg.go.dev/github.com/robfig/cron/v3#hdr-CRON_Expression_Format
+// [Predefined schedules]: https://pkg.go.dev/github.com/robfig/cron/v3#hdr-Predefined_schedules
+func WithCron(spec string) Opt {
+	return func(k *Keeper) (*Keeper, error) {
+		if len(spec) > 0 {
+			k.cronspec = spec
+		}
 		return k, nil
 	}
 }
