@@ -87,7 +87,7 @@ func WithTimeLayout(layout string) Opt {
 // Maximum size in bytes per log file.
 // Keeper will rotate the log file if its size exceeds this value.
 // Set this value to zero or negative will disable this feature.
-// The default value is 15[Mb].
+// The default value is 15 [Mb].
 func WithMaxSize(size int) Opt {
 	return func(k *Keeper) (*Keeper, error) {
 		k.maxSize = size

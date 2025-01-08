@@ -2,12 +2,12 @@ package lorekeeper
 
 // Sizes in bytes
 const (
-	// Kibibyte
+	// Kibibytes
 	Kb int = 1_024
-	// Kilobyte
+	// Kilobytes
 	KB int = 1_000
-	// Mebibyte
+	// Mebibytes
 	Mb int = 1_048_576
-	// Megabyte
+	// Megabytes
 	MB int = 1_000_000
 )
