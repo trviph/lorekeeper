@@ -25,6 +25,27 @@ func WithFolder(path string) Opt {
 // The name of the Keeper.
 // It will be set to the default value if the name is empty.
 // The default value is lorekeeper-<the executable name and extension>.
+//
+// Note(trviph): Name is used to identify the Keeper, so only one instance of
+// the Keeper with the same name can exists in the current process.
+// For example:
+//
+//	 func main() {
+//	 	// This will create a new Keeper with 10 Mb max log size.
+//			keeper1, _ := NewKeeper(
+//				WithName("unique-name"),
+//				WithMaxSize(10*Mb),
+//		 	)
+//
+//	 	// keeper2 will use the same instance of Keeper as keeper1, and update it configuration.
+//			keeper2, _ := NewKeeper(
+//	 		WithName("unique-name"),
+//	 		WithMaxSize(20*Mb),
+//	 	)
+//
+//	 	// Now both keeper1 and keeper2 will have maxSize of 20*MB.
+//	 	fmt.Print(keeper1.maxSize == keeper2.maxSize)
+//	 }
 func WithName(name string) Opt {
 	return func(k *Keeper) (*Keeper, error) {
 		if len(name) > 0 {
