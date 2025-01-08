@@ -2,10 +2,10 @@ package lorekeeper
 
 import "sync"
 
-// Keeping tracks if all Keeper instances by name
+// Keeping track of all Keeper instances by their name.
 var registry *sync.Map = new(sync.Map)
 
-// Register the Keeper to the registry if it not yet created,
+// Register the Keeper to the registry if it's not yet created,
 // else return the registered one.
 func register(name string, keeper *Keeper) (k *Keeper, new bool) {
 	val, loaded := registry.LoadOrStore(name, keeper)

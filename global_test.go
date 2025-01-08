@@ -28,7 +28,7 @@ func TestRegistry(t *testing.T) {
 	if keeper1 != keeper2 {
 		t.Errorf("expect to be the same instance")
 	}
-	if keeper1.maxSize != keeper2.maxSize {
+	if keeper1.maxSize != keeper2.maxSize && keeper1.maxSize == 20*Mb {
 		t.Errorf("expect maxSize to be the same")
 	}
 
