@@ -98,14 +98,19 @@ func applyOpts(keeper *Keeper, opts ...Opt) (*Keeper, error) {
 
 	file, err := keeper.getCurrentFile()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to apply option, caused by %w", err)
 	}
 	keeper.currentFile = file
+	stat, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("failed to apply option, caused by %w", err)
+	}
+	keeper.currentSize = int(stat.Size())
 
 	if keeper.maxFiles > 0 {
 		archived, err := keeper.getArchives()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to apply option, caused by %w", err)
 		}
 		keeper.archives = archived
 	}
