@@ -136,10 +136,10 @@ func WithMaxFiles(size int) Opt {
 // [cron]: https://pkg.go.dev/github.com/robfig/cron/v3
 // [CRON Expression Format]: https://pkg.go.dev/github.com/robfig/cron/v3#hdr-CRON_Expression_Format
 // [Predefined schedules]: https://pkg.go.dev/github.com/robfig/cron/v3#hdr-Predefined_schedules
-func WithCron(cronFormat string) Opt {
+func WithCron(spec string) Opt {
 	return func(k *Keeper) (*Keeper, error) {
-		if len(cronFormat) > 0 {
-			k.cronFormat = cronFormat
+		if len(spec) > 0 {
+			k.cronspec = spec
 		}
 		return k, nil
 	}

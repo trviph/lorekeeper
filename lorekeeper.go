@@ -31,7 +31,7 @@ type Keeper struct {
 	// See [WithMaxFiles] for documentation
 	maxFiles int
 	// See [WithCron] for documentation
-	cronFormat string
+	cronspec string
 
 	c        *cron.Cron
 	cEntryID cron.EntryID
@@ -130,17 +130,16 @@ func (k *Keeper) applyOpts(opts ...Opt) error {
 func (k *Keeper) setupCron() error {
 	if k.c == nil {
 		k.c = cron.New()
+		go k.c.Run()
 	} else {
 		k.c.Remove(k.cEntryID)
-		k.c.Stop()
 	}
-	if len(k.cronFormat) > 0 {
+	if len(k.cronspec) > 0 {
 		var err error
-		if k.cEntryID, err = k.c.AddFunc(k.cronFormat, func() { _ = k.Rotate() }); err != nil {
+		if k.cEntryID, err = k.c.AddFunc(k.cronspec, func() { _ = k.Rotate() }); err != nil {
 			return fmt.Errorf("failed to setup cron, caused by %w", err)
 		}
 	}
-	go k.c.Run()
 	return nil
 }
 
