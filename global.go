@@ -13,6 +13,6 @@ func register(name string, keeper *Keeper) (k *Keeper, new bool) {
 }
 
 // Unregister the Keeper of a given name.
-func deregister(name string) {
+func unregister(name string) {
 	registry.Delete(name)
 }

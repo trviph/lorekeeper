@@ -185,10 +185,17 @@ func (k *Keeper) Write(msg []byte) (int, error) {
 func (k *Keeper) Close() error {
 	k.mu.Lock()
 	defer k.mu.Unlock()
+	// Rotate the log
 	if err := k.rotate(); err != nil {
 		return fmt.Errorf("failed to rotate file, cause by %w", err)
 	}
-	deregister(k.name)
+	// Remove this Keeper from the registry
+	unregister(k.name)
+	if k.c != nil {
+		// Stop the cron scheduler to prevent goroutine leak
+		k.c.Stop()
+	}
+	// Close the file newly created file from rotate
 	return k.currentFile.Close()
 }
 
