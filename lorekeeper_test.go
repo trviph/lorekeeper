@@ -259,3 +259,25 @@ func TestKeeperGetCurrentFilePath(t *testing.T) {
 		})
 	}
 }
+
+func TestKeeperClose(t *testing.T) {
+	k, err := NewKeeper(
+		WithName("Test-Close"),
+	)
+	if _, ok := registry.Load(k.name); !ok {
+		t.Error("expected the keeper to be registered")
+	}
+
+	if err != nil {
+		t.Errorf("expected no error got %v", err)
+	}
+	if err := k.Close(); err != nil {
+		t.Errorf("expected no error got %v", err)
+	}
+	if _, err := k.Write([]byte{}); err == nil {
+		t.Errorf("expected error since Keeper is close got %v", err)
+	}
+	if val, ok := registry.Load(k.name); ok {
+		t.Errorf("expected the keeper to be gone from the registry but got %v", val)
+	}
+}
