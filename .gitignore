@@ -1,3 +1,2 @@
 *.log
-tests/*
-!tests/*.go
+*.old

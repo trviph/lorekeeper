@@ -4,6 +4,8 @@
 // It should play nicely together with the standard [log], [log/slog] packages, or any packages that follow the standard structure, like [Logrus].
 //
 // The core of Lorekeeper is the [Keeper] struct, which implemented the [io.WriteCloser] interface.
+// A [Keeper] with the same name should be safe to use in multiple goroutines in the same process,
+// but not safe when using on multiple processes.
 //
 // # The Keeper Struct
 //
@@ -65,7 +67,7 @@
 // The Keeper will then scan the folder for any related logs in the folder.
 // There are two kinds of log stored here, the first kind is the current log, which the Keeper is writing to, the name of the current log depends on [WithName] and [WithExtension] options.
 // If the Keeper finds an existing current log, it will reuse that log, if not it will create a new one.
-// The second kind is the archived log, which the keeper is keeping track of, the name of archives depends on [WithName], [WithExtension], and [WithArchiveNameLayout].
+// The second kind is the archived log, which the keeper is keeping track of, the name of archives depends on [WithName], [WithExtension], [WithTimeLayout], and [WithArchiveNameLayout].
 // Since the Keeper depends on the file name to determine which file to manage, be aware that changing any of the mentioned options will cause the logs from the previous execution to become orphaned and not managed by the Keeper.
 //
 // Every time the [Keeper.Write] is invoked, the Keeper will first check if the current log should be rotated before writing the message to the log.

@@ -8,7 +8,6 @@ import (
 	"path"
 	"sync"
 	"text/template"
-	"time"
 
 	"github.com/trviph/collection"
 )
@@ -31,7 +30,7 @@ type Keeper struct {
 	// Set [WithMaxFiles] for documentation
 	maxFiles int
 
-	fileMU      sync.Mutex
+	mu          sync.Mutex
 	currentFile io.WriteCloser
 	currentSize int
 
@@ -67,13 +66,33 @@ func NewKeeper(opts ...Opt) (*Keeper, error) {
 		WithArchiveNameLayout("{{ .time }}-{{ .name }}{{ .extension }}"),
 		WithMaxFiles(0),
 	}
+	finalOpts := append(defaultOpts, opts...)
 
+	keeper, err := applyOpts(new(Keeper), finalOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new keeper, caused by %w", err)
+	}
+
+	keeper, new := register(keeper.name, keeper)
+	// If loaded old keeper from registry, update it configurations
+	if !new {
+		keeper.mu.Lock()
+		defer keeper.mu.Unlock()
+		keeper, err = applyOpts(keeper, opts...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create new keeper, caused by %w", err)
+		}
+	}
+
+	return keeper, err
+}
+
+func applyOpts(keeper *Keeper, opts ...Opt) (*Keeper, error) {
 	var err error
-	keeper := new(Keeper)
-	for _, opt := range append(defaultOpts, opts...) {
+	for _, opt := range opts {
 		keeper, err = opt(keeper)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to apply option, caused by %w", err)
 		}
 	}
 
@@ -90,8 +109,7 @@ func NewKeeper(opts ...Opt) (*Keeper, error) {
 		}
 		keeper.archives = archived
 	}
-
-	return keeper, err
+	return keeper, nil
 }
 
 func (k *Keeper) getArchives() (*collection.List[string], error) {
@@ -114,8 +132,8 @@ func (k *Keeper) getCurrentFilePath() string {
 
 // Write the msg to the current log file.
 func (k *Keeper) Write(msg []byte) (int, error) {
-	k.fileMU.Lock()
-	defer k.fileMU.Unlock()
+	k.mu.Lock()
+	defer k.mu.Unlock()
 
 	if k.shouldRotate(msg) {
 		if err := k.rotate(); err != nil {
@@ -134,18 +152,19 @@ func (k *Keeper) Write(msg []byte) (int, error) {
 // Rotate the current log file and close the Keeper.
 // Any subsequence writes after this may cause error.
 func (k *Keeper) Close() error {
-	k.fileMU.Lock()
-	defer k.fileMU.Unlock()
+	k.mu.Lock()
+	defer k.mu.Unlock()
 	if err := k.rotate(); err != nil {
 		return fmt.Errorf("failed to rotate file, cause by %w", err)
 	}
+	deregister(k.name)
 	return k.currentFile.Close()
 }
 
 // Rotate to a new file immediately without waiting for the rotation conditions to be met.
 func (k *Keeper) Rotate() error {
-	k.fileMU.Lock()
-	defer k.fileMU.Unlock()
+	k.mu.Lock()
+	defer k.mu.Unlock()
 	return k.rotate()
 }
 
@@ -193,7 +212,7 @@ func (k *Keeper) newArchiveName() (string, error) {
 	err := k.archiveNameLayout.Execute(
 		&buff,
 		map[string]any{
-			"time":      time.Now().Format(k.timeLayout),
+			"time":      now().Format(k.timeLayout),
 			"name":      k.name,
 			"extension": k.extension,
 		},
