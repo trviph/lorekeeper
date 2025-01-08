@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"time"
 )
+
+var now func() time.Time = time.Now
 
 // Get default name for the [Keeper].
 func defaultKeeperName() string {

@@ -11,3 +11,8 @@ func register(name string, keeper *Keeper) (k *Keeper, new bool) {
 	val, loaded := registry.LoadOrStore(name, keeper)
 	return val.(*Keeper), !loaded
 }
+
+// Unregister the Keeper of a given name.
+func deregister(name string) {
+	registry.Delete(name)
+}

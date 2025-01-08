@@ -8,7 +8,6 @@ import (
 	"path"
 	"sync"
 	"text/template"
-	"time"
 
 	"github.com/trviph/collection"
 )
@@ -158,6 +157,7 @@ func (k *Keeper) Close() error {
 	if err := k.rotate(); err != nil {
 		return fmt.Errorf("failed to rotate file, cause by %w", err)
 	}
+	deregister(k.name)
 	return k.currentFile.Close()
 }
 
@@ -212,7 +212,7 @@ func (k *Keeper) newArchiveName() (string, error) {
 	err := k.archiveNameLayout.Execute(
 		&buff,
 		map[string]any{
-			"time":      time.Now().Format(k.timeLayout),
+			"time":      now().Format(k.timeLayout),
 			"name":      k.name,
 			"extension": k.extension,
 		},
