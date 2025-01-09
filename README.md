@@ -26,6 +26,7 @@ func main() {
     if err != nil {
         panic(err)
     }
+    defer defaultKeeper.Close()
 
     // Using lorekeeper with log
     logger := log.New(keeper, "[INFO] ", log.Lmsgprefix|log.LstdFlags)
@@ -53,6 +54,7 @@ func main() {
     if err != nil {
         panic(err)
     }
+    defer defaultKeeper.Close()
 
     // Using lorekeeper with slog
     logger := slog.New(slog.NewJSONHandler(keeper, nil))
@@ -81,6 +83,7 @@ func main() {
     if err != nil {
         panic(err)
     }
+    defer defaultKeeper.Close()
 
     // Using lorekeeper with logrus
     logger := log.New()
