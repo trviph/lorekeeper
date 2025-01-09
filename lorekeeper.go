@@ -31,10 +31,11 @@ type Keeper struct {
 	// See [WithMaxFiles] for documentation
 	maxFiles int
 	// See [WithCron] for documentation
-	cronspec string
-
 	cronScheduler *cron.Cron
 	cronEntryID   cron.EntryID
+	// See [WithGzip], [WithGzipLevel] for documentation
+	compressorContructor func(w io.Writer) (io.WriteCloser, error)
+	compressionExt       string
 
 	mu              sync.Mutex
 	currentFile     io.WriteCloser
@@ -71,7 +72,8 @@ func New(opts ...Opt) (*Keeper, error) {
 		WithMaxSize(15 * Mb),
 		WithArchiveNameLayout("{{ .time }}-{{ .name }}{{ .extension }}"),
 		WithMaxFiles(0),
-		WithCron(""),
+		NoCron(),
+		NoCompression(),
 	}
 	finalOpts := append(defaultOpts, opts...)
 
@@ -85,7 +87,7 @@ func New(opts ...Opt) (*Keeper, error) {
 	if !new {
 		keeper.mu.Lock()
 		defer keeper.mu.Unlock()
-		if err := keeper.applyOpts(opts...); err != nil {
+		if err := keeper.applyOpts(finalOpts...); err != nil {
 			return nil, fmt.Errorf("failed to create new keeper, caused by %w", err)
 		}
 	}
@@ -121,25 +123,6 @@ func (k *Keeper) applyOpts(opts ...Opt) error {
 		k.archives = archived
 	}
 
-	if err := k.setupCron(); err != nil {
-		return fmt.Errorf("failed to apply option, caused by %w", err)
-	}
-	return nil
-}
-
-func (k *Keeper) setupCron() error {
-	if k.cronScheduler == nil {
-		k.cronScheduler = cron.New()
-		go k.cronScheduler.Run()
-	} else {
-		k.cronScheduler.Remove(k.cronEntryID)
-	}
-	if len(k.cronspec) > 0 {
-		var err error
-		if k.cronEntryID, err = k.cronScheduler.AddFunc(k.cronspec, func() { _ = k.Rotate() }); err != nil {
-			return fmt.Errorf("failed to setup cron, caused by %w", err)
-		}
-	}
 	return nil
 }
 
@@ -228,6 +211,14 @@ func (k *Keeper) rotate() error {
 	k.currentFile = file
 	k.currentFileSize = 0
 
+	// Compress if set
+	if k.compressorContructor != nil {
+		if err := k.compress(archiveName); err != nil {
+			return fmt.Errorf("failed to compressed rotated log")
+		}
+		archiveName += k.compressionExt
+	}
+
 	// Remove oldest archive
 	if k.maxFiles > 0 {
 		k.archives.Append(archiveName)
@@ -242,6 +233,35 @@ func (k *Keeper) rotate() error {
 		}
 	}
 
+	return nil
+}
+
+func (k *Keeper) compress(name string) error {
+	f, err := os.Open(name)
+	if err != nil {
+		return fmt.Errorf("failed to open file, caused by %w", err)
+	}
+	defer f.Close()
+
+	cf, err := os.OpenFile(name+k.compressionExt, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to create compressed file, caused by %w", err)
+	}
+	defer cf.Close()
+
+	compressor, err := k.compressorContructor(cf)
+	if err != nil {
+		return fmt.Errorf("failed to create compress algorithm, caused by %w", err)
+	}
+	defer compressor.Close()
+
+	if _, err := f.WriteTo(compressor); err != nil {
+		return fmt.Errorf("failed to write to compressed file, caused by %w", err)
+	}
+
+	if err := os.Remove(name); err != nil {
+		return fmt.Errorf("failed to delete %s, caused by %w", name, err)
+	}
 	return nil
 }
 
@@ -274,7 +294,12 @@ func (k *Keeper) getArchiveGlobPattern() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to execute template, caused by %w", err)
 	}
-	return path.Join(k.folder, buff.String()), nil
+
+	pattern := buff.String()
+	if k.compressorContructor != nil {
+		return path.Join(k.folder, pattern+k.compressionExt), nil
+	}
+	return path.Join(k.folder, pattern), nil
 }
 
 func (k *Keeper) shouldRotate(nextMsg []byte) bool {

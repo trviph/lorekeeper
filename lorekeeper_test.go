@@ -14,7 +14,7 @@ func Test(t *testing.T) {
 	// Create a Keeper
 	keeper, err := New(
 		// Set the Keeper name, this will be used when generate log files.
-		WithName("Lorekeeper Test"),
+		WithName("Test"),
 		// Set the extension of archived logs.
 		WithExtension(".log"),
 		// Set the time layout of archived logs.
@@ -24,9 +24,11 @@ func Test(t *testing.T) {
 		// Each log file hold a maximum of 50 Kibibyte before being rotated.
 		WithMaxSize(50*Kb),
 		// Set the name layout of archived logs.
-		WithArchiveNameLayout("{{ .time }}-{{ .name }}{{ .extension }}"),
+		WithArchiveNameLayout("test-output-{{ .name }}{{.extension}}{{.time}}"),
 		// Set the maximum number of archives to keep.
-		WithMaxFiles(3),
+		WithMaxFiles(2),
+		// Set archives to be compressed with gzip
+		WithGzip(),
 	)
 	if err != nil {
 		t.Errorf("failed to create a new keeper, caused by %s", err)
@@ -65,7 +67,10 @@ func BenchmarkKeeperWrite(b *testing.B) {
 	k, _ := New(
 		WithFolder("."),
 		WithMaxSize(100*KB),
-		WithMaxFiles(3),
+		WithMaxFiles(1),
+		WithGzip(),
+		WithName("BenchmarkKeeperWrite"),
+		WithArchiveNameLayout("test-output-{{ .name }}{{.extension}}{{.time}}"),
 	)
 	logger := log.New(k, "[Benchmark] ", log.LstdFlags|log.Lmsgprefix)
 	b.Run(
@@ -303,6 +308,13 @@ func TestNew(t *testing.T) {
 				WithTimeLayout("20060102"),
 				WithArchiveNameLayout("{{ .time }}{{ .extension }}"),
 				WithCron("* * * * *"),
+				WithGzip(),
+			},
+		},
+		{
+			name: "empty extension",
+			opts: []Opt{
+				WithExtension(""),
 			},
 		},
 		{
@@ -315,7 +327,7 @@ func TestNew(t *testing.T) {
 		{
 			name: "invalid archive name template",
 			opts: []Opt{
-				WithCron("{{ time }}{{ name }}{{ .extension }}"),
+				WithArchiveNameLayout("{{ time }}{{ name }}{{ .extension }}"),
 			},
 			wantErr: true,
 		},
@@ -323,6 +335,13 @@ func TestNew(t *testing.T) {
 			name: "invalid cron spec",
 			opts: []Opt{
 				WithCron("999 * * * *"),
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid gzip level",
+			opts: []Opt{
+				WithGzipLevel(1000),
 			},
 			wantErr: true,
 		},
