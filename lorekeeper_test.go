@@ -163,7 +163,7 @@ func TestKeeperGetArchiveBlobPattern(t *testing.T) {
 		WithTimeLayout("20060102"),
 		WithName("testcase 1"),
 		WithExtension(".log"),
-		WithArchiveNameLayout("log.old"),
+		WithArchiveNameLayout("log.old*"),
 	}
 	tests := []struct {
 		name string // description of this test case
@@ -175,7 +175,7 @@ func TestKeeperGetArchiveBlobPattern(t *testing.T) {
 		{
 			name: "with fixed name",
 			opts: defaultOpts,
-			want: filepath.Join(os.TempDir(), "log.old"),
+			want: filepath.Join(os.TempDir(), "log.old*"),
 		},
 		{
 			name: "with configured name",
@@ -184,7 +184,7 @@ func TestKeeperGetArchiveBlobPattern(t *testing.T) {
 				WithName("testcase 2"),
 				WithArchiveNameLayout("{{ .name }}.old"),
 			),
-			want: filepath.Join(os.TempDir(), "testcase-2.old"),
+			want: filepath.Join(os.TempDir(), "testcase-2.old*"),
 		},
 		{
 			name: "with configured name, extension",
@@ -193,7 +193,7 @@ func TestKeeperGetArchiveBlobPattern(t *testing.T) {
 				WithName("testcase 3"),
 				WithArchiveNameLayout("{{ .name }}{{ .extension }}"),
 			),
-			want: filepath.Join(os.TempDir(), "testcase-3.log"),
+			want: filepath.Join(os.TempDir(), "testcase-3.log*"),
 		},
 		{
 			name: "with configured name, extension, and time",
