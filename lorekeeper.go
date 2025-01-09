@@ -14,7 +14,7 @@ import (
 )
 
 // A [Keeper] is a log file manager that handles writing to log files and rotates them.
-// Use [NewKeeper] to create a new Keeper.
+// Use [New] to create a new Keeper.
 type Keeper struct {
 	// See [WithFolder] for documentation.
 	folder string
@@ -33,12 +33,12 @@ type Keeper struct {
 	// See [WithCron] for documentation
 	cronspec string
 
-	c        *cron.Cron
-	cEntryID cron.EntryID
+	cronScheduler *cron.Cron
+	cronEntryID   cron.EntryID
 
-	mu          sync.Mutex
-	currentFile io.WriteCloser
-	currentSize int
+	mu              sync.Mutex
+	currentFile     io.WriteCloser
+	currentFileSize int
 
 	archives *collection.List[string]
 }
@@ -57,12 +57,12 @@ var _ io.WriteCloser = (*Keeper)(nil)
 //		import "github.com/trviph/lorekeeper"
 //
 //		func main() {
-//			keeper, err := lorekeeper.NewKeeper(
+//			keeper, err := lorekeeper.New(
 //				lorekeeper.WithName("Lorekeeper Example"),
 //				lorekeeper.WithMaxByte(12 * lorekeeper.Kb),
 //	 	)
 //		}
-func NewKeeper(opts ...Opt) (*Keeper, error) {
+func New(opts ...Opt) (*Keeper, error) {
 	defaultOpts := []Opt{
 		WithFolder(os.TempDir()),
 		WithName(defaultKeeperName()),
@@ -111,7 +111,7 @@ func (k *Keeper) applyOpts(opts ...Opt) error {
 	if err != nil {
 		return fmt.Errorf("failed to apply option, caused by %w", err)
 	}
-	k.currentSize = int(stat.Size())
+	k.currentFileSize = int(stat.Size())
 
 	if k.maxFiles > 0 {
 		archived, err := k.getArchives()
@@ -128,15 +128,15 @@ func (k *Keeper) applyOpts(opts ...Opt) error {
 }
 
 func (k *Keeper) setupCron() error {
-	if k.c == nil {
-		k.c = cron.New()
-		go k.c.Run()
+	if k.cronScheduler == nil {
+		k.cronScheduler = cron.New()
+		go k.cronScheduler.Run()
 	} else {
-		k.c.Remove(k.cEntryID)
+		k.cronScheduler.Remove(k.cronEntryID)
 	}
 	if len(k.cronspec) > 0 {
 		var err error
-		if k.cEntryID, err = k.c.AddFunc(k.cronspec, func() { _ = k.Rotate() }); err != nil {
+		if k.cronEntryID, err = k.cronScheduler.AddFunc(k.cronspec, func() { _ = k.Rotate() }); err != nil {
 			return fmt.Errorf("failed to setup cron, caused by %w", err)
 		}
 	}
@@ -176,7 +176,7 @@ func (k *Keeper) Write(msg []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	k.currentSize += n
+	k.currentFileSize += n
 	return n, nil
 }
 
@@ -187,13 +187,13 @@ func (k *Keeper) Close() error {
 	defer k.mu.Unlock()
 	// Rotate the log
 	if err := k.rotate(); err != nil {
-		return fmt.Errorf("failed to rotate file, cause by %w", err)
+		return fmt.Errorf("failed to rotate file, caused by %w", err)
 	}
 	// Remove this Keeper from the registry
 	unregister(k.name)
-	if k.c != nil {
+	if k.cronScheduler != nil {
 		// Stop the cron scheduler to prevent goroutine leak
-		k.c.Stop()
+		k.cronScheduler.Stop()
 	}
 	// Close the file newly created file from rotate
 	return k.currentFile.Close()
@@ -226,7 +226,7 @@ func (k *Keeper) rotate() error {
 		return err
 	}
 	k.currentFile = file
-	k.currentSize = 0
+	k.currentFileSize = 0
 
 	// Remove oldest archive
 	if k.maxFiles > 0 {
@@ -278,5 +278,5 @@ func (k *Keeper) getArchiveGlobPattern() (string, error) {
 }
 
 func (k *Keeper) shouldRotate(nextMsg []byte) bool {
-	return k.maxSize > 0 && k.currentSize+len(nextMsg) > k.maxSize
+	return k.maxSize > 0 && k.currentFileSize+len(nextMsg) > k.maxSize
 }

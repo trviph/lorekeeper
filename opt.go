@@ -8,7 +8,7 @@ import (
 
 // An Opt is a function that mutates a [Keeper]'s attributes.
 // An Opt should return a mutated Keeper or return an error if it fails to mutate the Keeper.
-// An Opt should be used together with [NewKeeper].
+// An Opt should be used together with [New].
 type Opt func(*Keeper) (*Keeper, error)
 
 // The folder where the log files are stored.
@@ -103,6 +103,10 @@ func WithMaxSize(size int) Opt {
 //   - {{ .time }} the time when the rotation happened.
 //   - {{ .name }} the name of the Keeper.
 //   - {{ .extension }} the extension of the file.
+//
+// Note: In order to avoid races in cases where more than one [Keeper]s are running,
+// the layout should contains all the supported arguments
+// or specify another log folder using [WithFolder].
 func WithArchiveNameLayout(layout string) Opt {
 	return func(k *Keeper) (*Keeper, error) {
 		if len(layout) == 0 {

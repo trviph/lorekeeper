@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-func TestRegistry(t *testing.T) {
-	keeper1, err := NewKeeper(
+func TestRegistryOk(t *testing.T) {
+	keeper1, err := New(
 		WithName("unique-name"),
 		WithFolder("."),
 		WithMaxSize(10*Mb),
@@ -16,7 +16,7 @@ func TestRegistry(t *testing.T) {
 		t.Errorf("expect no error but got %v", err)
 	}
 
-	keeper2, err := NewKeeper(
+	keeper2, err := New(
 		WithName("unique-name"),
 		WithMaxSize(20*Mb),
 	)
@@ -46,7 +46,7 @@ func TestRegistry(t *testing.T) {
 	run(keeper2, 2)
 
 	// Create new keeper
-	keeper3, err := NewKeeper(
+	keeper3, err := New(
 		WithName("another-unique-name"),
 		WithFolder("."),
 		WithMaxSize(10*Mb),

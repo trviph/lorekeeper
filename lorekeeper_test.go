@@ -12,7 +12,7 @@ import (
 // This test demonstrates on how to use [lorekeeper.Keeper] with the std [log].
 func Test(t *testing.T) {
 	// Create a Keeper
-	keeper, err := NewKeeper(
+	keeper, err := New(
 		// Set the Keeper name, this will be used when generate log files.
 		WithName("Lorekeeper Test"),
 		// Set the extension of archived logs.
@@ -62,7 +62,7 @@ func Test(t *testing.T) {
 
 func BenchmarkKeeperWrite(b *testing.B) {
 	const lorem = "Culpa sequi esse et et expedita aut qui quia. Error minus modi sunt beatae asperiores qui rem. Quia minima cumque laudantium sed rerum. Sunt delectus nesciunt dolor veniam soluta provident porro deserunt. Ullam illo beatae et quos unde maxime repellendus. Beatae itaque totam eum itaque velit et. Sit molestias dolore deserunt rerum amet. Molestiae rem provident minima autem nulla numquam. Illum voluptas ea nam suscipit. Corporis molestias necessitatibus dolore facilis. Nostrum cum nemo vero. Enim dolorem esse ad. Sed numquam odio eum ex. Praesentium incidunt quod perferendis sit est omnis sapiente. Sed rem itaque laboriosam minus eos. Sed fugiat dolores ut. Nam veniam nihil voluptatem accusamus molestias ducimus. Minima aut consequuntur dolores facere inventore libero tempore omnis. Suscipit et aut nostrum. Porro sapiente dignissimos nisi error. Et nulla vel molestiae veniam molestiae eum. Est similique sapiente aperiam voluptate cum occaecati et laboriosam. Praesentium cupiditate et laboriosam aperiam neque ut ut. Provident blanditiis autem pariatur autem animi et sint dicta."
-	k, _ := NewKeeper(
+	k, _ := New(
 		WithFolder("."),
 		WithMaxSize(100*KB),
 		WithMaxFiles(3),
@@ -132,7 +132,7 @@ func TestKeeperNewArchiveName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			k, err := NewKeeper(tt.opts...)
+			k, err := New(tt.opts...)
 			if err != nil {
 				t.Fatalf("could not construct receiver type: %v", err)
 			}
@@ -202,7 +202,7 @@ func TestKeeperGetArchiveBlobPattern(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			k, err := NewKeeper(tt.opts...)
+			k, err := New(tt.opts...)
 			if err != nil {
 				t.Fatalf("could not construct receiver type: %v", err)
 			}
@@ -248,7 +248,7 @@ func TestKeeperGetCurrentFilePath(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			k, err := NewKeeper(tt.opts...)
+			k, err := New(tt.opts...)
 			if err != nil {
 				t.Fatalf("could not construct receiver type: %v", err)
 			}
@@ -261,7 +261,7 @@ func TestKeeperGetCurrentFilePath(t *testing.T) {
 }
 
 func TestKeeperClose(t *testing.T) {
-	k, err := NewKeeper(
+	k, err := New(
 		WithName("Test-Close"),
 	)
 	if _, ok := registry.Load(k.name); !ok {
@@ -279,5 +279,66 @@ func TestKeeperClose(t *testing.T) {
 	}
 	if val, ok := registry.Load(k.name); ok {
 		t.Errorf("expected the keeper to be gone from the registry but got %v", val)
+	}
+}
+
+func TestNew(t *testing.T) {
+	tests := []struct {
+		name string // description of this test case
+		// Named input parameters for target function.
+		opts    []Opt
+		wantErr bool
+	}{
+		{
+			name: "default",
+		},
+		{
+			name: "fully configured",
+			opts: []Opt{
+				WithFolder("."),
+				WithName("fully configured"),
+				WithExtension(".log"),
+				WithMaxSize(10),
+				WithMaxFiles(5),
+				WithTimeLayout("20060102"),
+				WithArchiveNameLayout("{{ .time }}{{ .extension }}"),
+				WithCron("* * * * *"),
+			},
+		},
+		{
+			name: "folder not existed",
+			opts: []Opt{
+				WithFolder("/lorem-ipsum-jada-jada"),
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid archive name template",
+			opts: []Opt{
+				WithCron("{{ time }}{{ name }}{{ .extension }}"),
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid cron spec",
+			opts: []Opt{
+				WithCron("999 * * * *"),
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, gotErr := New(tt.opts...)
+			if gotErr != nil {
+				if !tt.wantErr {
+					t.Errorf("New() failed: %v", gotErr)
+				}
+				return
+			}
+			if tt.wantErr {
+				t.Fatal("New() succeeded unexpectedly")
+			}
+		})
 	}
 }
