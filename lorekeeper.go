@@ -174,11 +174,16 @@ func (k *Keeper) Close() error {
 	}
 	// Remove this Keeper from the registry
 	unregister(k.name)
+	// Free it resources
+	return k.free()
+}
+
+func (k *Keeper) free() error {
 	if k.cronScheduler != nil {
 		// Stop the cron scheduler to prevent goroutine leak
 		k.cronScheduler.Stop()
 	}
-	// Close the file newly created file from rotate
+	// Close the opening file descriptor
 	return k.currentFile.Close()
 }
 
@@ -296,8 +301,11 @@ func (k *Keeper) getArchiveGlobPattern() (string, error) {
 	}
 
 	pattern := buff.String()
-	if k.compressorContructor != nil {
-		return path.Join(k.folder, pattern+k.compressionExt), nil
+	// The glob star may exists if {{ .time }} is put at the end of k.archiveNameLayout,
+	// appending another star after will make it invalid.
+	if pattern[len(pattern)-1] != '*' {
+		// Append a star at the end to also get files that are compressed.
+		pattern += "*"
 	}
 	return path.Join(k.folder, pattern), nil
 }

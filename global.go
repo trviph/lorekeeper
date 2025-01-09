@@ -9,6 +9,11 @@ var registry *sync.Map = new(sync.Map)
 // else return the registered one.
 func register(name string, keeper *Keeper) (k *Keeper, new bool) {
 	val, loaded := registry.LoadOrStore(name, keeper)
+	if loaded {
+		go func() {
+			_ = keeper.free()
+		}()
+	}
 	return val.(*Keeper), !loaded
 }
 
