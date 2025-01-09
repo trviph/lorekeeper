@@ -7,29 +7,34 @@ import (
 )
 
 func TestRegistry(t *testing.T) {
-	keeper1, err := NewKeeper(
+	keeper1, err := New(
 		WithName("unique-name"),
 		WithFolder("."),
 		WithMaxSize(10*Mb),
+		WithCron("* * * * *"),
+		WithArchiveNameLayout("test-output-{{ .name }}{{.extension}}{{ .time }}"),
 	)
 	if err != nil {
 		t.Errorf("expect no error but got %v", err)
 	}
 
-	keeper2, err := NewKeeper(
+	keeper2, err := New(
 		WithName("unique-name"),
 		WithMaxSize(20*Mb),
+		WithArchiveNameLayout("test-output-{{ .name }}-{{.extension}}{{.time}}"),
 	)
 	if err != nil {
 		t.Errorf("expect no error but got %v", err)
 	}
 
-	// Now both keeper1 and keeper2 will have maxSize of 20*MB.
 	if keeper1 != keeper2 {
 		t.Errorf("expect to be the same instance")
 	}
 	if keeper1.maxSize != keeper2.maxSize && keeper1.maxSize == 20*Mb {
 		t.Errorf("expect maxSize to be the same")
+	}
+	if keeper1.cronScheduler != nil {
+		t.Errorf("expect cron to be stop")
 	}
 
 	// Expect no race
@@ -46,7 +51,7 @@ func TestRegistry(t *testing.T) {
 	run(keeper2, 2)
 
 	// Create new keeper
-	keeper3, err := NewKeeper(
+	keeper3, err := New(
 		WithName("another-unique-name"),
 		WithFolder("."),
 		WithMaxSize(10*Mb),

@@ -10,7 +10,7 @@
 // # The Keeper Struct
 //
 // Keeper is a log manager that writes logs to files and rotates them.
-// To create a Keeper, use the [NewKeeper] function. For example, the following code will create a Keeper with the default configuration:
+// To create a Keeper, use the [New] function. For example, the following code will create a Keeper with the default configuration:
 //
 //	import (
 //		"log"

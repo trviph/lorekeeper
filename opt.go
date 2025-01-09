@@ -1,14 +1,19 @@
 package lorekeeper
 
 import (
+	"bytes"
+	"compress/gzip"
 	"fmt"
+	"io"
 	"strings"
 	"text/template"
+
+	"github.com/robfig/cron/v3"
 )
 
 // An Opt is a function that mutates a [Keeper]'s attributes.
 // An Opt should return a mutated Keeper or return an error if it fails to mutate the Keeper.
-// An Opt should be used together with [NewKeeper].
+// An Opt should be used together with [New].
 type Opt func(*Keeper) (*Keeper, error)
 
 // The folder where the log files are stored.
@@ -55,12 +60,16 @@ func WithName(name string) Opt {
 	}
 }
 
-// The extension of the output log file.
-// It should include a dot prefix and can be empty.
+// The extension of the output log file, can be empty.
+// A "." will be prepended if missing.
 // The default value is ".log".
 func WithExtension(extension string) Opt {
 	return func(k *Keeper) (*Keeper, error) {
+		if len(extension) > 0 && extension[0] != '.' {
+			extension = "." + extension
+		}
 		k.extension = extension
+
 		return k, nil
 	}
 }
@@ -103,6 +112,10 @@ func WithMaxSize(size int) Opt {
 //   - {{ .time }} the time when the rotation happened.
 //   - {{ .name }} the name of the Keeper.
 //   - {{ .extension }} the extension of the file.
+//
+// Note: In order to avoid races in cases where more than one [Keeper]s are running,
+// the layout should contains all the supported arguments
+// or specify another log folder using [WithFolder].
 func WithArchiveNameLayout(layout string) Opt {
 	return func(k *Keeper) (*Keeper, error) {
 		if len(layout) == 0 {
@@ -138,9 +151,59 @@ func WithMaxFiles(size int) Opt {
 // [Predefined schedules]: https://pkg.go.dev/github.com/robfig/cron/v3#hdr-Predefined_schedules
 func WithCron(spec string) Opt {
 	return func(k *Keeper) (*Keeper, error) {
-		if len(spec) > 0 {
-			k.cronspec = spec
+		if k.cronScheduler == nil {
+			k.cronScheduler = cron.New()
+			go k.cronScheduler.Run()
+		} else {
+			k.cronScheduler.Remove(k.cronEntryID)
 		}
+
+		var err error
+		if k.cronEntryID, err = k.cronScheduler.AddFunc(spec, func() { _ = k.Rotate() }); err != nil {
+			return nil, fmt.Errorf("failed to setup cron, caused by %w", err)
+		}
+		return k, nil
+	}
+}
+
+// No cron
+func NoCron() Opt {
+	return func(k *Keeper) (*Keeper, error) {
+		if k.cronScheduler != nil {
+			k.cronScheduler.Stop()
+		}
+		k.cronScheduler = nil
+		k.cronEntryID = 0
+		return k, nil
+	}
+}
+
+// Archive will be compressed with Gzip
+func WithGzip() Opt {
+	return WithGzipLevel(gzip.DefaultCompression)
+}
+
+// Archive will be compressed with Gzip, see [gzip.NoCompression] for available levels.
+func WithGzipLevel(level int) Opt {
+	return func(k *Keeper) (*Keeper, error) {
+		var temp *bytes.Buffer
+		if _, err := gzip.NewWriterLevel(temp, level); err != nil {
+			return nil, fmt.Errorf("failed to create compress, caused by %w", err)
+		}
+
+		k.compressorContructor = func(w io.Writer) (io.WriteCloser, error) {
+			return gzip.NewWriterLevel(w, level)
+		}
+		k.compressionExt = ".gz"
+		return k, nil
+	}
+}
+
+// No compression
+func NoCompression() Opt {
+	return func(k *Keeper) (*Keeper, error) {
+		k.compressorContructor = nil
+		k.compressionExt = ""
 		return k, nil
 	}
 }

@@ -14,7 +14,7 @@ import (
 )
 
 // A [Keeper] is a log file manager that handles writing to log files and rotates them.
-// Use [NewKeeper] to create a new Keeper.
+// Use [New] to create a new Keeper.
 type Keeper struct {
 	// See [WithFolder] for documentation.
 	folder string
@@ -31,14 +31,15 @@ type Keeper struct {
 	// See [WithMaxFiles] for documentation
 	maxFiles int
 	// See [WithCron] for documentation
-	cronspec string
+	cronScheduler *cron.Cron
+	cronEntryID   cron.EntryID
+	// See [WithGzip], [WithGzipLevel] for documentation
+	compressorContructor func(w io.Writer) (io.WriteCloser, error)
+	compressionExt       string
 
-	c        *cron.Cron
-	cEntryID cron.EntryID
-
-	mu          sync.Mutex
-	currentFile io.WriteCloser
-	currentSize int
+	mu              sync.Mutex
+	currentFile     io.WriteCloser
+	currentFileSize int
 
 	archives *collection.List[string]
 }
@@ -57,12 +58,12 @@ var _ io.WriteCloser = (*Keeper)(nil)
 //		import "github.com/trviph/lorekeeper"
 //
 //		func main() {
-//			keeper, err := lorekeeper.NewKeeper(
+//			keeper, err := lorekeeper.New(
 //				lorekeeper.WithName("Lorekeeper Example"),
 //				lorekeeper.WithMaxByte(12 * lorekeeper.Kb),
 //	 	)
 //		}
-func NewKeeper(opts ...Opt) (*Keeper, error) {
+func New(opts ...Opt) (*Keeper, error) {
 	defaultOpts := []Opt{
 		WithFolder(os.TempDir()),
 		WithName(defaultKeeperName()),
@@ -71,7 +72,8 @@ func NewKeeper(opts ...Opt) (*Keeper, error) {
 		WithMaxSize(15 * Mb),
 		WithArchiveNameLayout("{{ .time }}-{{ .name }}{{ .extension }}"),
 		WithMaxFiles(0),
-		WithCron(""),
+		NoCron(),
+		NoCompression(),
 	}
 	finalOpts := append(defaultOpts, opts...)
 
@@ -85,7 +87,7 @@ func NewKeeper(opts ...Opt) (*Keeper, error) {
 	if !new {
 		keeper.mu.Lock()
 		defer keeper.mu.Unlock()
-		if err := keeper.applyOpts(opts...); err != nil {
+		if err := keeper.applyOpts(finalOpts...); err != nil {
 			return nil, fmt.Errorf("failed to create new keeper, caused by %w", err)
 		}
 	}
@@ -111,7 +113,7 @@ func (k *Keeper) applyOpts(opts ...Opt) error {
 	if err != nil {
 		return fmt.Errorf("failed to apply option, caused by %w", err)
 	}
-	k.currentSize = int(stat.Size())
+	k.currentFileSize = int(stat.Size())
 
 	if k.maxFiles > 0 {
 		archived, err := k.getArchives()
@@ -121,25 +123,6 @@ func (k *Keeper) applyOpts(opts ...Opt) error {
 		k.archives = archived
 	}
 
-	if err := k.setupCron(); err != nil {
-		return fmt.Errorf("failed to apply option, caused by %w", err)
-	}
-	return nil
-}
-
-func (k *Keeper) setupCron() error {
-	if k.c == nil {
-		k.c = cron.New()
-		go k.c.Run()
-	} else {
-		k.c.Remove(k.cEntryID)
-	}
-	if len(k.cronspec) > 0 {
-		var err error
-		if k.cEntryID, err = k.c.AddFunc(k.cronspec, func() { _ = k.Rotate() }); err != nil {
-			return fmt.Errorf("failed to setup cron, caused by %w", err)
-		}
-	}
 	return nil
 }
 
@@ -176,7 +159,7 @@ func (k *Keeper) Write(msg []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	k.currentSize += n
+	k.currentFileSize += n
 	return n, nil
 }
 
@@ -187,13 +170,13 @@ func (k *Keeper) Close() error {
 	defer k.mu.Unlock()
 	// Rotate the log
 	if err := k.rotate(); err != nil {
-		return fmt.Errorf("failed to rotate file, cause by %w", err)
+		return fmt.Errorf("failed to rotate file, caused by %w", err)
 	}
 	// Remove this Keeper from the registry
 	unregister(k.name)
-	if k.c != nil {
+	if k.cronScheduler != nil {
 		// Stop the cron scheduler to prevent goroutine leak
-		k.c.Stop()
+		k.cronScheduler.Stop()
 	}
 	// Close the file newly created file from rotate
 	return k.currentFile.Close()
@@ -226,7 +209,15 @@ func (k *Keeper) rotate() error {
 		return err
 	}
 	k.currentFile = file
-	k.currentSize = 0
+	k.currentFileSize = 0
+
+	// Compress if set
+	if k.compressorContructor != nil {
+		if err := k.compress(archiveName); err != nil {
+			return fmt.Errorf("failed to compressed rotated log")
+		}
+		archiveName += k.compressionExt
+	}
 
 	// Remove oldest archive
 	if k.maxFiles > 0 {
@@ -242,6 +233,35 @@ func (k *Keeper) rotate() error {
 		}
 	}
 
+	return nil
+}
+
+func (k *Keeper) compress(name string) error {
+	f, err := os.Open(name)
+	if err != nil {
+		return fmt.Errorf("failed to open file, caused by %w", err)
+	}
+	defer f.Close()
+
+	cf, err := os.OpenFile(name+k.compressionExt, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to create compressed file, caused by %w", err)
+	}
+	defer cf.Close()
+
+	compressor, err := k.compressorContructor(cf)
+	if err != nil {
+		return fmt.Errorf("failed to create compress algorithm, caused by %w", err)
+	}
+	defer compressor.Close()
+
+	if _, err := f.WriteTo(compressor); err != nil {
+		return fmt.Errorf("failed to write to compressed file, caused by %w", err)
+	}
+
+	if err := os.Remove(name); err != nil {
+		return fmt.Errorf("failed to delete %s, caused by %w", name, err)
+	}
 	return nil
 }
 
@@ -274,9 +294,14 @@ func (k *Keeper) getArchiveGlobPattern() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to execute template, caused by %w", err)
 	}
-	return path.Join(k.folder, buff.String()), nil
+
+	pattern := buff.String()
+	if k.compressorContructor != nil {
+		return path.Join(k.folder, pattern+k.compressionExt), nil
+	}
+	return path.Join(k.folder, pattern), nil
 }
 
 func (k *Keeper) shouldRotate(nextMsg []byte) bool {
-	return k.maxSize > 0 && k.currentSize+len(nextMsg) > k.maxSize
+	return k.maxSize > 0 && k.currentFileSize+len(nextMsg) > k.maxSize
 }
