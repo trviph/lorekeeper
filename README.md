@@ -8,6 +8,8 @@ Lorekeeper is a Go package that manages log rotation. It should work nicely with
 
 ## Quick Guide
 
+For more detailed information, please refer to the [GoDoc](https://pkg.go.dev/github.com/trviph/lorekeeper).
+
 ### With Standard log Package
 
 Package [log](https://pkg.go.dev/log) implements a simple logging package.
