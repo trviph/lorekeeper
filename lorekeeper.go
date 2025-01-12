@@ -207,7 +207,6 @@ func (k *Keeper) rotate() error {
 	if err != nil {
 		return fmt.Errorf("failed to get new archive name, caused by %w", err)
 	}
-	archiveSize := k.currentFileSize
 
 	if err := os.Rename(k.getCurrentFilePath(), archiveName); err != nil {
 		return fmt.Errorf("failed to rotate log file, caused by %w", err)
@@ -215,22 +214,20 @@ func (k *Keeper) rotate() error {
 
 	// Compress if set
 	if k.compressorContructor != nil {
-		compressedBytes, err := k.compress(archiveName)
-		if err != nil {
+		if err := k.compress(archiveName); err != nil {
 			return fmt.Errorf("failed to compressed rotated log")
 		}
 		archiveName += k.compressionExt
-		archiveSize = compressedBytes
 	}
 
+	archiveInfo, err := getFileInfo(archiveName)
+	if err != nil {
+		return fmt.Errorf("failed to compressed stat")
+	}
+	k.archivesSize += archiveInfo.size
+	k.archives.Append(archiveInfo)
+
 	// Remove oldest archive
-	k.archivesSize += k.currentFileSize
-	k.archives.Append(
-		&fileInfo{
-			filePath: archiveName,
-			size:     archiveSize,
-		},
-	)
 	for k.shouldDeleteOldest() {
 		oldest, err := k.archives.Dequeue()
 		if err != nil {
@@ -253,34 +250,34 @@ func (k *Keeper) rotate() error {
 	return nil
 }
 
-func (k *Keeper) compress(name string) (int, error) {
+func (k *Keeper) compress(name string) error {
 	f, err := os.Open(name)
 	if err != nil {
-		return 0, fmt.Errorf("failed to open file, caused by %w", err)
+		return fmt.Errorf("failed to open file, caused by %w", err)
 	}
 	defer f.Close()
 
 	cf, err := os.OpenFile(name+k.compressionExt, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return 0, fmt.Errorf("failed to create compressed file, caused by %w", err)
+		return fmt.Errorf("failed to create compressed file, caused by %w", err)
 	}
 	defer cf.Close()
 
 	compressor, err := k.compressorContructor(cf)
 	if err != nil {
-		return 0, fmt.Errorf("failed to create compress algorithm, caused by %w", err)
+		return fmt.Errorf("failed to create compress algorithm, caused by %w", err)
 	}
 	defer compressor.Close()
 
-	compressedBytes, err := f.WriteTo(compressor)
+	_, err = f.WriteTo(compressor)
 	if err != nil {
-		return 0, fmt.Errorf("failed to write to compressed file, caused by %w", err)
+		return fmt.Errorf("failed to write to compressed file, caused by %w", err)
 	}
 
 	if err := os.Remove(name); err != nil {
-		return 0, fmt.Errorf("failed to delete %s, caused by %w", name, err)
+		return fmt.Errorf("failed to delete %s, caused by %w", name, err)
 	}
-	return int(compressedBytes), nil
+	return nil
 }
 
 func (k *Keeper) newArchiveName() (string, error) {
