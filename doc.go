@@ -115,7 +115,7 @@
 // Although the two Keepers have different names, they still manage the same set of archives which have a glob pattern of "/tmp/logs/*.log*".
 // To avoid this, it is best to supply all available arguments into [WithArchiveNameLayout] and only change their position, or you can just simply use [WithFolder] to store logs into a separate folder altogether.
 //
-// When using Lorekeeper in multiple processes, the user must make sure to configure the Keepers as mentioned above.
+// Using Lorekeeper in multiple processes is not safe, and the user must make sure to configure the Keepers as mentioned above.
 //
 // Each Keeper struct, upon creation, will hold a file descriptor and a cron scheduler goroutine, so to avoid memory leakage make sure to use [Keeper.Close] to properly discard a Keeper.
 //

@@ -36,12 +36,15 @@ type Keeper struct {
 	// See [WithGzip], [WithGzipLevel] for documentation
 	compressorContructor func(w io.Writer) (io.WriteCloser, error)
 	compressionExt       string
+	// See [WithTotalSize] for documentation
+	totalSize int
 
 	mu              sync.Mutex
 	currentFile     io.WriteCloser
 	currentFileSize int
 
-	archives *collection.List[string]
+	archives     *collection.List[*fileInfo]
+	archivesSize int
 }
 
 // Make sure that keeper implements the [io.Writer] interface,
@@ -74,6 +77,7 @@ func New(opts ...Opt) (*Keeper, error) {
 		WithMaxFiles(0),
 		NoCron(),
 		NoCompression(),
+		WithTotalSize(0),
 	}
 	finalOpts := append(defaultOpts, opts...)
 
@@ -115,21 +119,19 @@ func (k *Keeper) applyOpts(opts ...Opt) error {
 	}
 	k.currentFileSize = int(stat.Size())
 
-	if k.maxFiles > 0 {
-		archived, err := k.getArchives()
-		if err != nil {
-			return fmt.Errorf("failed to apply option, caused by %w", err)
-		}
-		k.archives = archived
+	archives, size, err := k.getArchives()
+	if err != nil {
+		return fmt.Errorf("failed to apply option, caused by %w", err)
 	}
-
+	k.archives = archives
+	k.archivesSize = size
 	return nil
 }
 
-func (k *Keeper) getArchives() (*collection.List[string], error) {
+func (k *Keeper) getArchives() (*collection.List[*fileInfo], int, error) {
 	pattern, err := k.getArchiveGlobPattern()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get archive pattern, caused by %w", err)
+		return nil, 0, fmt.Errorf("failed to get archive pattern, caused by %w", err)
 	}
 	return getArchives(pattern)
 }
@@ -200,21 +202,15 @@ func (k *Keeper) rotate() error {
 	if err := k.currentFile.Close(); err != nil {
 		return fmt.Errorf("failed to rotate log file, caused by %w", err)
 	}
+
 	archiveName, err := k.newArchiveName()
 	if err != nil {
 		return fmt.Errorf("failed to get new archive name, caused by %w", err)
 	}
+
 	if err := os.Rename(k.getCurrentFilePath(), archiveName); err != nil {
 		return fmt.Errorf("failed to rotate log file, caused by %w", err)
 	}
-
-	// Create a new file
-	file, err := k.getCurrentFile()
-	if err != nil {
-		return err
-	}
-	k.currentFile = file
-	k.currentFileSize = 0
 
 	// Compress if set
 	if k.compressorContructor != nil {
@@ -224,19 +220,32 @@ func (k *Keeper) rotate() error {
 		archiveName += k.compressionExt
 	}
 
-	// Remove oldest archive
-	if k.maxFiles > 0 {
-		k.archives.Append(archiveName)
-		for k.archives.Length() > k.maxFiles {
-			oldest, err := k.archives.Dequeue()
-			if err != nil {
-				return fmt.Errorf("failed to get oldest archive name, caused by %w", err)
-			}
-			if err := os.Remove(oldest); err != nil {
-				return fmt.Errorf("failed to remove oldest archive name, caused by %w", err)
-			}
-		}
+	archiveInfo, err := getFileInfo(archiveName)
+	if err != nil {
+		return fmt.Errorf("failed to compressed stat")
 	}
+	k.archivesSize += archiveInfo.size
+	k.archives.Append(archiveInfo)
+
+	// Remove oldest archive
+	for k.shouldDeleteOldest() {
+		oldest, err := k.archives.Dequeue()
+		if err != nil {
+			return fmt.Errorf("failed to get oldest archive, caused by %w", err)
+		}
+		if err := os.Remove(oldest.filePath); err != nil {
+			return fmt.Errorf("failed to remove oldest archive with path %q, caused by %w", oldest.filePath, err)
+		}
+		k.archivesSize -= oldest.size
+	}
+
+	// Create a new file
+	file, err := k.getCurrentFile()
+	if err != nil {
+		return err
+	}
+	k.currentFile = file
+	k.currentFileSize = 0
 
 	return nil
 }
@@ -260,7 +269,8 @@ func (k *Keeper) compress(name string) error {
 	}
 	defer compressor.Close()
 
-	if _, err := f.WriteTo(compressor); err != nil {
+	_, err = f.WriteTo(compressor)
+	if err != nil {
 		return fmt.Errorf("failed to write to compressed file, caused by %w", err)
 	}
 
@@ -312,4 +322,9 @@ func (k *Keeper) getArchiveGlobPattern() (string, error) {
 
 func (k *Keeper) shouldRotate(nextMsg []byte) bool {
 	return k.maxSize > 0 && k.currentFileSize+len(nextMsg) > k.maxSize
+}
+
+func (k *Keeper) shouldDeleteOldest() bool {
+	return (k.totalSize > 0 && k.totalSize < k.archivesSize) ||
+		(k.maxFiles > 0 && k.maxFiles < k.archives.Length())
 }
