@@ -207,3 +207,13 @@ func NoCompression() Opt {
 		return k, nil
 	}
 }
+
+// Delete the oldest archive if the total size of all
+// archives exceeds this value. Set < 1 to disable, is disabled by default.
+// If both this and [WithMaxFiles] are set, the Keeper will use whatever condition is met first.
+func WithTotalSize(size int) Opt {
+	return func(k *Keeper) (*Keeper, error) {
+		k.totalSize = size
+		return k, nil
+	}
+}

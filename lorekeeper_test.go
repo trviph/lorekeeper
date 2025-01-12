@@ -29,6 +29,8 @@ func Test(t *testing.T) {
 		WithMaxFiles(2),
 		// Set archives to be compressed with gzip
 		WithGzip(),
+		// Set max size for all archives to keep
+		WithTotalSize(1000*KB),
 	)
 	if err != nil {
 		t.Errorf("failed to create a new keeper, caused by %s", err)

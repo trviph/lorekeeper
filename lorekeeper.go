@@ -36,12 +36,15 @@ type Keeper struct {
 	// See [WithGzip], [WithGzipLevel] for documentation
 	compressorContructor func(w io.Writer) (io.WriteCloser, error)
 	compressionExt       string
+	// See [WithTotalSize] for documentation
+	totalSize int
 
 	mu              sync.Mutex
 	currentFile     io.WriteCloser
 	currentFileSize int
 
-	archives *collection.List[string]
+	archives     *collection.List[*fileInfo]
+	archivesSize int
 }
 
 // Make sure that keeper implements the [io.Writer] interface,
@@ -74,6 +77,7 @@ func New(opts ...Opt) (*Keeper, error) {
 		WithMaxFiles(0),
 		NoCron(),
 		NoCompression(),
+		WithTotalSize(0),
 	}
 	finalOpts := append(defaultOpts, opts...)
 
@@ -115,21 +119,19 @@ func (k *Keeper) applyOpts(opts ...Opt) error {
 	}
 	k.currentFileSize = int(stat.Size())
 
-	if k.maxFiles > 0 {
-		archived, err := k.getArchives()
-		if err != nil {
-			return fmt.Errorf("failed to apply option, caused by %w", err)
-		}
-		k.archives = archived
+	archives, size, err := k.getArchives()
+	if err != nil {
+		return fmt.Errorf("failed to apply option, caused by %w", err)
 	}
-
+	k.archives = archives
+	k.archivesSize = size
 	return nil
 }
 
-func (k *Keeper) getArchives() (*collection.List[string], error) {
+func (k *Keeper) getArchives() (*collection.List[*fileInfo], int, error) {
 	pattern, err := k.getArchiveGlobPattern()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get archive pattern, caused by %w", err)
+		return nil, 0, fmt.Errorf("failed to get archive pattern, caused by %w", err)
 	}
 	return getArchives(pattern)
 }
@@ -200,12 +202,44 @@ func (k *Keeper) rotate() error {
 	if err := k.currentFile.Close(); err != nil {
 		return fmt.Errorf("failed to rotate log file, caused by %w", err)
 	}
+
 	archiveName, err := k.newArchiveName()
 	if err != nil {
 		return fmt.Errorf("failed to get new archive name, caused by %w", err)
 	}
+	archiveSize := k.currentFileSize
+
 	if err := os.Rename(k.getCurrentFilePath(), archiveName); err != nil {
 		return fmt.Errorf("failed to rotate log file, caused by %w", err)
+	}
+
+	// Compress if set
+	if k.compressorContructor != nil {
+		compressedBytes, err := k.compress(archiveName)
+		if err != nil {
+			return fmt.Errorf("failed to compressed rotated log")
+		}
+		archiveName += k.compressionExt
+		archiveSize = compressedBytes
+	}
+
+	// Remove oldest archive
+	k.archivesSize += k.currentFileSize
+	k.archives.Append(
+		&fileInfo{
+			filePath: archiveName,
+			size:     archiveSize,
+		},
+	)
+	for k.shouldDeleteOldest() {
+		oldest, err := k.archives.Dequeue()
+		if err != nil {
+			return fmt.Errorf("failed to get oldest archive, caused by %w", err)
+		}
+		if err := os.Remove(oldest.filePath); err != nil {
+			return fmt.Errorf("failed to remove oldest archive with path %q, caused by %w", oldest.filePath, err)
+		}
+		k.archivesSize -= oldest.size
 	}
 
 	// Create a new file
@@ -216,58 +250,37 @@ func (k *Keeper) rotate() error {
 	k.currentFile = file
 	k.currentFileSize = 0
 
-	// Compress if set
-	if k.compressorContructor != nil {
-		if err := k.compress(archiveName); err != nil {
-			return fmt.Errorf("failed to compressed rotated log")
-		}
-		archiveName += k.compressionExt
-	}
-
-	// Remove oldest archive
-	if k.maxFiles > 0 {
-		k.archives.Append(archiveName)
-		for k.archives.Length() > k.maxFiles {
-			oldest, err := k.archives.Dequeue()
-			if err != nil {
-				return fmt.Errorf("failed to get oldest archive name, caused by %w", err)
-			}
-			if err := os.Remove(oldest); err != nil {
-				return fmt.Errorf("failed to remove oldest archive name, caused by %w", err)
-			}
-		}
-	}
-
 	return nil
 }
 
-func (k *Keeper) compress(name string) error {
+func (k *Keeper) compress(name string) (int, error) {
 	f, err := os.Open(name)
 	if err != nil {
-		return fmt.Errorf("failed to open file, caused by %w", err)
+		return 0, fmt.Errorf("failed to open file, caused by %w", err)
 	}
 	defer f.Close()
 
 	cf, err := os.OpenFile(name+k.compressionExt, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return fmt.Errorf("failed to create compressed file, caused by %w", err)
+		return 0, fmt.Errorf("failed to create compressed file, caused by %w", err)
 	}
 	defer cf.Close()
 
 	compressor, err := k.compressorContructor(cf)
 	if err != nil {
-		return fmt.Errorf("failed to create compress algorithm, caused by %w", err)
+		return 0, fmt.Errorf("failed to create compress algorithm, caused by %w", err)
 	}
 	defer compressor.Close()
 
-	if _, err := f.WriteTo(compressor); err != nil {
-		return fmt.Errorf("failed to write to compressed file, caused by %w", err)
+	compressedBytes, err := f.WriteTo(compressor)
+	if err != nil {
+		return 0, fmt.Errorf("failed to write to compressed file, caused by %w", err)
 	}
 
 	if err := os.Remove(name); err != nil {
-		return fmt.Errorf("failed to delete %s, caused by %w", name, err)
+		return 0, fmt.Errorf("failed to delete %s, caused by %w", name, err)
 	}
-	return nil
+	return int(compressedBytes), nil
 }
 
 func (k *Keeper) newArchiveName() (string, error) {
@@ -312,4 +325,9 @@ func (k *Keeper) getArchiveGlobPattern() (string, error) {
 
 func (k *Keeper) shouldRotate(nextMsg []byte) bool {
 	return k.maxSize > 0 && k.currentFileSize+len(nextMsg) > k.maxSize
+}
+
+func (k *Keeper) shouldDeleteOldest() bool {
+	return (k.totalSize > 0 && k.totalSize < k.archivesSize) ||
+		(k.maxFiles > 0 && k.maxFiles < k.archives.Length())
 }
